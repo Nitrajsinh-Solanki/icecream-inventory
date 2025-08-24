@@ -1,6 +1,5 @@
 // icecream-inventory\src\app\login\page.tsx
 
-
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -30,6 +29,9 @@ export default function LoginPage() {
 
     const data = await res.json();
     if (res.ok) {
+      // ✅ Save user session in localStorage
+      localStorage.setItem("user", JSON.stringify(data.user));
+
       toast.success("Login successful! Redirecting...");
       setTimeout(() => router.push("/dashboard"), 2000);
     } else {
@@ -69,6 +71,7 @@ export default function LoginPage() {
                   className="w-full border border-gray-300 pl-10 pr-3 py-3 rounded-md 
                     focus:ring-2 focus:ring-blue-400 outline-none 
                     placeholder-gray-500 text-gray-900 text-base"
+                  required
                 />
               </div>
 
@@ -83,6 +86,7 @@ export default function LoginPage() {
                   className="w-full border border-gray-300 pl-10 pr-3 py-3 rounded-md 
                     focus:ring-2 focus:ring-blue-400 outline-none 
                     placeholder-gray-500 text-gray-900 text-base"
+                  required
                 />
               </div>
 
