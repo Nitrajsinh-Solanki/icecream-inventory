@@ -1,5 +1,10 @@
 // src/app/dashboard/stocks/page.tsx
 
+
+
+
+
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -23,6 +28,10 @@ export default function StockPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Search & filter states
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showLowStock, setShowLowStock] = useState(false);
 
   // Load userId from localStorage
   useEffect(() => {
@@ -59,6 +68,18 @@ export default function StockPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
+  // Apply filtering
+  const filteredProducts = products.filter((p) => {
+    const matchSearch =
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.category || "").toLowerCase().includes(searchTerm.toLowerCase());
+
+    const isLowStock =
+      p.minStock !== undefined && p.quantity < p.minStock;
+
+    return matchSearch && (!showLowStock || isLowStock);
+  });
+
   // If not logged in
   if (!userId) {
     return (
@@ -81,11 +102,47 @@ export default function StockPage() {
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Stock Management</h1>
+          <div className="flex gap-3">
+            <button
+              onClick={() => router.push("/dashboard/stocks/history")}
+              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg shadow"
+            >
+              View History
+            </button>
+            <button
+              onClick={() => router.push("/dashboard/stocks/restock")}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow"
+            >
+              Restock
+            </button>
+          </div>
+        </div>
+
+        {/* Search & Filters */}
+        <div className="bg-gray-100 border border-gray-300 p-4 rounded-lg shadow mb-6 flex flex-wrap gap-4 items-center">
+          <input
+            type="text"
+            placeholder="Search by Name or Category"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="border border-gray-400 rounded px-3 py-2 w-64 text-sm text-gray-800 focus:ring-2 focus:ring-blue-500"
+          />
+          <label className="flex items-center gap-2 text-sm text-gray-800">
+            <input
+              type="checkbox"
+              checked={showLowStock}
+              onChange={(e) => setShowLowStock(e.target.checked)}
+            />
+            Show Low Stock Items
+          </label>
           <button
-            onClick={() => router.push("/dashboard/stocks/restock")}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow"
+            onClick={() => {
+              setSearchTerm("");
+              setShowLowStock(false);
+            }}
+            className="bg-gray-300 hover:bg-gray-400 text-sm px-3 py-2 rounded text-gray-900 font-medium"
           >
-            Restock
+            Reset
           </button>
         </div>
 
@@ -112,14 +169,14 @@ export default function StockPage() {
                     Loading...
                   </td>
                 </tr>
-              ) : products.length === 0 ? (
+              ) : filteredProducts.length === 0 ? (
                 <tr>
                   <td colSpan={3} className="text-center py-6 text-gray-500">
                     No products found
                   </td>
                 </tr>
               ) : (
-                products.map((p, i) => {
+                filteredProducts.map((p, i) => {
                   const isLow = p.minStock !== undefined && p.quantity < p.minStock;
                   return (
                     <tr

@@ -22,22 +22,22 @@ export default function RestockPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [restockValues, setRestockValues] = useState<Record<string, number>>({});
 
-  // Load userId from localStorage
+  // Stores quantity changes
+  const [restockValues, setRestockValues] = useState<Record<string, number>>({});
+  // Stores notes per product
+  const [notes, setNotes] = useState<Record<string, string>>({});
+
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
         if (parsed && parsed._id) setUserId(String(parsed._id));
-      } catch {
-        // ignore errors
-      }
+      } catch {}
     }
   }, []);
 
-  // Fetch products
   const fetchProducts = async () => {
     if (!userId) return;
     try {
@@ -46,8 +46,7 @@ export default function RestockPage() {
       if (!res.ok) throw new Error("Failed to fetch products");
       const data = await res.json();
       setProducts(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error(err);
+    } catch {
       toast.error("Failed to load products");
     } finally {
       setLoading(false);
@@ -56,26 +55,30 @@ export default function RestockPage() {
 
   useEffect(() => {
     if (userId) fetchProducts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  // Handle input change
-  const handleChange = (id: string, value: string) => {
+  const handleQuantityChange = (id: string, value: string) => {
     const num = Number(value);
-    if (isNaN(num) || num < 0) return;
+    if (isNaN(num)) return; // allow negative too
     setRestockValues((prev) => ({ ...prev, [id]: num }));
   };
 
-  // Save restocks
+  const handleNoteChange = (id: string, value: string) => {
+    setNotes((prev) => ({ ...prev, [id]: value }));
+  };
+
   const handleSave = async () => {
     if (!userId) return;
+
     try {
-      const updates = Object.entries(restockValues).filter(([_, qty]) => qty > 0);
+      const updates = Object.entries(restockValues).filter(([_, qty]) => qty !== 0);
 
       if (updates.length === 0) {
         toast.error("Please enter at least one quantity");
         return;
       }
+
+      const restockedItems: any[] = [];
 
       for (const [id, qty] of updates) {
         const product = products.find((p) => p._id === id);
@@ -83,21 +86,37 @@ export default function RestockPage() {
 
         const newQty = product.quantity + qty;
 
-        const res = await fetch("/api/products", {
+        // Update product stock (can be decreased or increased)
+        await fetch("/api/products", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id, userId, quantity: newQty }),
         });
 
-        if (!res.ok) throw new Error("Update failed for some products");
+        // Store in history array with note
+        restockedItems.push({
+          productId: product._id,
+          name: product.name,
+          category: product.category,
+          unit: product.unit,
+          quantity: qty,
+          note: notes[id] || "Restocking",
+        });
       }
 
-      toast.success("Stock updated successfully!");
+      // Save to history
+      await fetch("/api/restockHistory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, items: restockedItems }),
+      });
+
+      toast.success("Stock updated & history saved!");
       setRestockValues({});
+      setNotes({});
       fetchProducts();
       router.push("/dashboard/stocks");
-    } catch (err) {
-      console.error(err);
+    } catch {
       toast.error("Failed to update stock");
     }
   };
@@ -118,7 +137,6 @@ export default function RestockPage() {
       <DashboardNavbar />
 
       <main className="flex-grow container mx-auto px-4 py-6">
-        {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Restock Products</h1>
           <button
@@ -129,47 +147,49 @@ export default function RestockPage() {
           </button>
         </div>
 
-        {/* Table */}
         <div className="overflow-x-auto bg-white rounded-2xl shadow-lg border border-gray-200">
           <table className="w-full border-collapse">
             <thead className="bg-gradient-to-r from-green-600 to-green-500 text-white">
               <tr>
-                <th className="px-6 py-4 text-left font-semibold text-sm uppercase tracking-wider">Name</th>
-                <th className="px-6 py-4 text-left font-semibold text-sm uppercase tracking-wider">Category</th>
-                <th className="px-6 py-4 text-left font-semibold text-sm uppercase tracking-wider">Add Quantity</th>
-                <th className="px-6 py-4 text-left font-semibold text-sm uppercase tracking-wider">Unit</th>
+                <th className="px-6 py-4 text-left">Name</th>
+                <th className="px-6 py-4 text-left">Category</th>
+                <th className="px-6 py-4 text-left">Quantity (+/-)</th>
+                <th className="px-6 py-4 text-left">Unit</th>
+                <th className="px-6 py-4 text-left">Note</th>
               </tr>
             </thead>
             <tbody className="text-gray-800">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="text-center py-6 text-gray-600">Loading...</td>
+                  <td colSpan={5} className="text-center py-6 text-gray-600">Loading...</td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="text-center py-6 text-gray-500">No products found</td>
+                  <td colSpan={5} className="text-center py-6 text-gray-500">No products found</td>
                 </tr>
               ) : (
                 products.map((p, i) => (
-                  <tr
-                    key={p._id}
-                    className={`${
-                      i % 2 === 0 ? "bg-gray-50" : "bg-white"
-                    } hover:bg-green-50 transition`}
-                  >
+                  <tr key={p._id} className={`${i % 2 === 0 ? "bg-gray-50" : "bg-white"} hover:bg-green-50`}>
                     <td className="px-6 py-4 font-medium">{p.name}</td>
                     <td className="px-6 py-4">{p.category || "-"}</td>
                     <td className="px-6 py-4">
                       <input
                         type="number"
-                        min="0"
                         value={restockValues[p._id] ?? ""}
-                        onChange={(e) => handleChange(p._id, e.target.value)}
-                        className="w-28 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:ring-2 focus:ring-green-500 outline-none"
+                        onChange={(e) => handleQuantityChange(p._id, e.target.value)}
+                        className="w-28 border border-gray-300 rounded-lg px-3 py-2"
                         placeholder="0"
                       />
                     </td>
                     <td className="px-6 py-4">{p.unit}</td>
+                    <td className="px-6 py-4">
+                      <input
+                        type="text"
+                        value={notes[p._id] ?? "Restocking"}
+                        onChange={(e) => handleNoteChange(p._id, e.target.value)}
+                        className="w-40 border border-gray-300 rounded-lg px-3 py-2"
+                      />
+                    </td>
                   </tr>
                 ))
               )}
@@ -177,7 +197,6 @@ export default function RestockPage() {
           </table>
         </div>
 
-        {/* Save button */}
         <div className="flex justify-end mt-6">
           <button
             onClick={handleSave}
