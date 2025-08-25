@@ -1,5 +1,8 @@
 // icecream-inventory\src\app\dashboard\stocks\restock\page.tsx
 
+
+// icecream-inventory\src\app\dashboard\stocks\restock\page.tsx
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -25,8 +28,8 @@ export default function RestockPage() {
 
   // Stores quantity changes
   const [restockValues, setRestockValues] = useState<Record<string, number>>({});
-  // Stores notes per product
-  const [notes, setNotes] = useState<Record<string, string>>({});
+  // ✅ Single note for all items
+  const [globalNote, setGlobalNote] = useState("Restocking");
 
   useEffect(() => {
     const stored = localStorage.getItem("user");
@@ -63,10 +66,6 @@ export default function RestockPage() {
     setRestockValues((prev) => ({ ...prev, [id]: num }));
   };
 
-  const handleNoteChange = (id: string, value: string) => {
-    setNotes((prev) => ({ ...prev, [id]: value }));
-  };
-
   const handleSave = async () => {
     if (!userId) return;
 
@@ -86,21 +85,21 @@ export default function RestockPage() {
 
         const newQty = product.quantity + qty;
 
-        // Update product stock (can be decreased or increased)
+        // Update product stock
         await fetch("/api/products", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id, userId, quantity: newQty }),
         });
 
-        // Store in history array with note
+        // ✅ Apply same globalNote to all
         restockedItems.push({
           productId: product._id,
           name: product.name,
           category: product.category,
           unit: product.unit,
           quantity: qty,
-          note: notes[id] || "Restocking",
+          note: globalNote || "Restocking",
         });
       }
 
@@ -113,7 +112,7 @@ export default function RestockPage() {
 
       toast.success("Stock updated & history saved!");
       setRestockValues({});
-      setNotes({});
+      setGlobalNote("Restocking");
       fetchProducts();
       router.push("/dashboard/stocks");
     } catch {
@@ -147,6 +146,18 @@ export default function RestockPage() {
           </button>
         </div>
 
+        {/* ✅ Single Note Input */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700">Restock Reason / Note</label>
+          <input
+            type="text"
+            value={globalNote}
+            onChange={(e) => setGlobalNote(e.target.value)}
+            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2"
+            placeholder="e.g. New stock arrival, adjustment, etc."
+          />
+        </div>
+
         <div className="overflow-x-auto bg-white rounded-2xl shadow-lg border border-gray-200">
           <table className="w-full border-collapse">
             <thead className="bg-gradient-to-r from-green-600 to-green-500 text-white">
@@ -155,17 +166,16 @@ export default function RestockPage() {
                 <th className="px-6 py-4 text-left">Category</th>
                 <th className="px-6 py-4 text-left">Quantity (+/-)</th>
                 <th className="px-6 py-4 text-left">Unit</th>
-                <th className="px-6 py-4 text-left">Note</th>
               </tr>
             </thead>
             <tbody className="text-gray-800">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-6 text-gray-600">Loading...</td>
+                  <td colSpan={4} className="text-center py-6 text-gray-600">Loading...</td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-6 text-gray-500">No products found</td>
+                  <td colSpan={4} className="text-center py-6 text-gray-500">No products found</td>
                 </tr>
               ) : (
                 products.map((p, i) => (
@@ -182,14 +192,6 @@ export default function RestockPage() {
                       />
                     </td>
                     <td className="px-6 py-4">{p.unit}</td>
-                    <td className="px-6 py-4">
-                      <input
-                        type="text"
-                        value={notes[p._id] ?? "Restocking"}
-                        onChange={(e) => handleNoteChange(p._id, e.target.value)}
-                        className="w-40 border border-gray-300 rounded-lg px-3 py-2"
-                      />
-                    </td>
                   </tr>
                 ))
               )}

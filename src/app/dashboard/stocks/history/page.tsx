@@ -1,12 +1,19 @@
 // icecream-inventory/src/app/dashboard/stocks/history/page.tsx
 
+
+
+
+
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";   // ✅ Import router
+import { useRouter } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+
 
 interface RestockItem {
   productId: string;
@@ -35,7 +42,7 @@ export default function HistoryPage() {
   const [thisMonthOnly, setThisMonthOnly] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
-  const router = useRouter(); // ✅ Router hook
+  const router = useRouter();
 
   useEffect(() => {
     const stored = localStorage.getItem("user");
@@ -77,34 +84,23 @@ export default function HistoryPage() {
     return `${day}/${month}/${year} ${hours}:${minutes}`;
   };
 
-  // Apply filters and sorting
+  // Apply filters
   const filteredHistory = history
     .filter((h) => {
-      const formattedDate = formatDateTime(h.createdAt).split(" ")[0]; // Only date for filtering
-
-      // Search by exact DD/MM/YYYY
+      const formattedDate = formatDateTime(h.createdAt).split(" ")[0];
       if (searchDate && !formattedDate.includes(searchDate)) return false;
 
       const d = new Date(h.createdAt);
-
-      // Month filter (e.g. "2025-08")
       if (monthFilter) {
         const [year, month] = monthFilter.split("-");
-        if (
-          d.getFullYear() !== parseInt(year) ||
-          d.getMonth() + 1 !== parseInt(month)
-        ) {
+        if (d.getFullYear() !== parseInt(year) || d.getMonth() + 1 !== parseInt(month)) {
           return false;
         }
       }
 
-      // This month filter
       if (thisMonthOnly) {
         const now = new Date();
-        if (
-          d.getFullYear() !== now.getFullYear() ||
-          d.getMonth() !== now.getMonth()
-        ) {
+        if (d.getFullYear() !== now.getFullYear() || d.getMonth() !== now.getMonth()) {
           return false;
         }
       }
@@ -117,6 +113,76 @@ export default function HistoryPage() {
       return sortOrder === "asc" ? da - db : db - da;
     });
 
+  // ✅ Download single history
+  const downloadHistory = (h: RestockHistory) => {
+    const doc = new jsPDF();
+    const dateTime = formatDateTime(h.createdAt);
+    const reason = h.items[0]?.note || "Restocking";
+
+    doc.setFontSize(14);
+    doc.text("Restock History Report", 14, 15);
+    doc.setFontSize(11);
+    doc.text(`Date & Time: ${dateTime}`, 14, 25);
+    doc.text(`Reason: ${reason}`, 14, 32);
+
+    const tableData = h.items.map((item) => [
+      item.name,
+      item.category || "-",
+      `${item.quantity} ${item.unit}`,
+    ]);
+
+    autoTable(doc, {
+      head: [["Name", "Category", "Quantity"]],
+      body: tableData,
+      startY: 40,
+    });
+    
+    // Filename: DATE-REASON
+    const safeReason = reason.replace(/[^a-z0-9]/gi, "_").substring(0, 20);
+    const fileName = `${dateTime.split(" ")[0]}-${safeReason}.pdf`;
+    doc.save(fileName);
+  };
+
+  // ✅ Download all (filtered or all)
+  const downloadAllHistory = () => {
+    if (filteredHistory.length === 0) {
+      toast.error("No records to download");
+      return;
+    }
+
+    const doc = new jsPDF();
+    doc.setFontSize(14);
+    doc.text("All Restock History Records", 14, 15);
+
+    let y = 25;
+    filteredHistory.forEach((h, idx) => {
+      const dateTime = formatDateTime(h.createdAt);
+      const reason = h.items[0]?.note || "Restocking";
+
+      doc.setFontSize(11);
+      doc.text(`Record ${idx + 1}`, 14, y);
+      doc.text(`Date & Time: ${dateTime}`, 14, y + 7);
+      doc.text(`Reason: ${reason}`, 14, y + 14);
+
+      const tableData = h.items.map((item) => [
+        item.name,
+        item.category || "-",
+        `${item.quantity} ${item.unit}`,
+      ]);
+
+      autoTable(doc, {
+        head: [["Name", "Category", "Quantity"]],
+        body: tableData,
+        startY: y + 20,
+      });
+      
+
+      y = (doc as any).lastAutoTable.finalY + 15;
+    });
+
+    doc.save("ALL STOCK RECORDS.pdf");
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <DashboardNavbar />
@@ -125,12 +191,20 @@ export default function HistoryPage() {
         {/* Title + Back Button */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Restock History</h1>
-          <button
-            onClick={() => router.push("/dashboard/stocks")}
-            className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg shadow"
-          >
-            Back to Home
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={downloadAllHistory}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow"
+            >
+              Download All
+            </button>
+            <button
+              onClick={() => router.push("/dashboard/stocks")}
+              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg shadow"
+            >
+              Back to Home
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -187,21 +261,25 @@ export default function HistoryPage() {
               <div key={h._id} className="bg-white rounded-lg shadow p-4">
                 <div className="flex justify-between items-center">
                   <div>
-                    <p className="font-medium text-gray-900">
-                      {formatDateTime(h.createdAt)}
-                    </p>
+                    <p className="font-medium text-gray-900">{formatDateTime(h.createdAt)}</p>
                     <p className="text-sm text-gray-600 italic">
                       Reason: {h.items[0]?.note || "Restocking"}
                     </p>
                   </div>
-                  <button
-                    onClick={() =>
-                      setExpanded(expanded === h._id ? null : h._id)
-                    }
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
-                  >
-                    {expanded === h._id ? "Hide" : "View"}
-                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setExpanded(expanded === h._id ? null : h._id)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
+                    >
+                      {expanded === h._id ? "Hide" : "View"}
+                    </button>
+                    <button
+                      onClick={() => downloadHistory(h)}
+                      className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded"
+                    >
+                      Download History
+                    </button>
+                  </div>
                 </div>
 
                 {expanded === h._id && (
@@ -211,19 +289,14 @@ export default function HistoryPage() {
                         <th className="px-4 py-2 text-left font-semibold">Name</th>
                         <th className="px-4 py-2 text-left font-semibold">Category</th>
                         <th className="px-4 py-2 text-left font-semibold">Quantity</th>
-                        <th className="px-4 py-2 text-left font-semibold">Note</th>
                       </tr>
                     </thead>
                     <tbody>
                       {h.items.map((item) => (
-                        <tr
-                          key={item.productId}
-                          className="border-t hover:bg-gray-50"
-                        >
+                        <tr key={item.productId} className="border-t hover:bg-gray-50">
                           <td className="px-4 py-2">{item.name}</td>
                           <td className="px-4 py-2">{item.category || "-"}</td>
                           <td className="px-4 py-2">{`${item.quantity} ${item.unit}`}</td>
-                          <td className="px-4 py-2">{item.note || "Restocking"}</td>
                         </tr>
                       ))}
                     </tbody>

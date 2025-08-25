@@ -3,8 +3,6 @@
 
 
 
-
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -12,6 +10,8 @@ import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface Product {
   _id: string;
@@ -74,11 +74,75 @@ export default function StockPage() {
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (p.category || "").toLowerCase().includes(searchTerm.toLowerCase());
 
-    const isLowStock =
-      p.minStock !== undefined && p.quantity < p.minStock;
-
+    const isLowStock = p.minStock !== undefined && p.quantity < p.minStock;
     return matchSearch && (!showLowStock || isLowStock);
   });
+
+  // ✅ Format date/time for filename
+  const getDateTimeString = () => {
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, "0");
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const year = now.getFullYear();
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    return `${day}-${month}-${year}-${hours}-${minutes}`;
+  };
+
+  // ✅ Download Stock Report
+  const downloadStockReport = () => {
+    if (filteredProducts.length === 0) {
+      toast.error("No stock records to download");
+      return;
+    }
+  
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text("Stock Report", 14, 15);
+  
+    // ✅ Add Date & Time below the title
+    const now = new Date();
+    const dateTime = `${String(now.getDate()).padStart(2, "0")}/${
+      String(now.getMonth() + 1).padStart(2, "0")
+    }/${now.getFullYear()} ${String(now.getHours()).padStart(2, "0")}:${String(
+      now.getMinutes()
+    ).padStart(2, "0")}`;
+  
+    doc.setFontSize(11);
+    doc.text(`Generated on: ${dateTime}`, 14, 22);
+  
+    // Prepare table data
+    const tableData = filteredProducts.map((p) => [
+      p.name,
+      p.category || "-",
+      `${p.quantity} ${p.unit}`,
+      p.minStock !== undefined ? p.minStock : "-",
+    ]);
+  
+    autoTable(doc, {
+      head: [["Name", "Category", "Quantity", "Min Stock"]],
+      body: tableData,
+      startY: 30, // ⬅️ shifted down because we added date/time
+      didParseCell: function (data) {
+        if (data.section === "body") {
+          const rowIndex = data.row.index;
+          const product = filteredProducts[rowIndex];
+          const isLow =
+            product.minStock !== undefined && product.quantity < product.minStock;
+  
+          if (isLow) {
+            data.cell.styles.fillColor = [255, 200, 200]; // light red bg
+            data.cell.styles.textColor = [180, 0, 0]; // dark red text
+            data.cell.styles.fontStyle = "bold";
+          }
+        }
+      },
+    });
+  
+    const fileName = `STOCK-${getDateTimeString()}.pdf`;
+    doc.save(fileName);
+  };
+  
 
   // If not logged in
   if (!userId) {
@@ -103,6 +167,12 @@ export default function StockPage() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Stock Management</h1>
           <div className="flex gap-3">
+            <button
+              onClick={downloadStockReport}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow"
+            >
+              Download Stock Report
+            </button>
             <button
               onClick={() => router.push("/dashboard/stocks/history")}
               className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg shadow"
