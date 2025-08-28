@@ -3,7 +3,7 @@
 "use client";
 
 import Link from "next/link";
-import { Package, Boxes, UserCircle } from "lucide-react";
+import { Package, Boxes, UserCircle, Users } from "lucide-react";
 
 export default function DashboardNavbar() {
   return (
@@ -37,6 +37,12 @@ export default function DashboardNavbar() {
             className="flex items-center gap-2 hover:text-yellow-300 transition"
           >
             <Boxes size={18} /> Stock Management
+          </Link>
+          <Link
+            href="/dashboard/customers"
+            className="flex items-center gap-2 hover:text-yellow-300 transition"
+          >
+            <Users size={18} /> Customer Management
           </Link>
         </nav>
 
