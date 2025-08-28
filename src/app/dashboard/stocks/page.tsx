@@ -167,12 +167,22 @@ export default function StockPage() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Stock Management</h1>
           <div className="flex gap-3">
-            <button
-              onClick={downloadStockReport}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow"
-            >
-              Download Stock Report
-            </button>
+          {filteredProducts.length === 0 ? (
+  <button
+    disabled
+    className="flex items-center gap-2 bg-gray-300 text-gray-600 font-medium px-4 py-2 rounded-lg shadow cursor-not-allowed"
+  >
+    No Stock to Export
+  </button>
+) : (
+  <button
+    onClick={downloadStockReport}
+    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg shadow transition-all duration-300"
+  >
+    Download Stock Report
+  </button>
+)}
+
             <button
               onClick={() => router.push("/dashboard/stocks/history")}
               className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg shadow"

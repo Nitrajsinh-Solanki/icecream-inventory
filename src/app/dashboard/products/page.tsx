@@ -295,6 +295,12 @@ export default function ProductsPage(): JSX.Element {
   };
 
   const exportPDF = () => {
+    if (filtered.length === 0) {
+      toast.error("No products to export");
+      return;
+    }
+
+
     const doc = new jsPDF("p", "pt");
   
     // Format date as DD/MM/YYYY
@@ -395,9 +401,24 @@ export default function ProductsPage(): JSX.Element {
     Back to Home
   </button>
 
+  {filtered.length === 0 ? (
+  // ❌ No Products Button
+  <button
+    disabled
+    className="flex items-center gap-2 bg-gray-300 text-gray-600 font-medium px-5 py-2.5 rounded-xl shadow cursor-not-allowed"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" 
+         className="w-6 h-6" 
+         fill="currentColor" 
+         viewBox="0 0 20 20">
+      <path fillRule="evenodd" d="M3 14a1 1 0 011-1h3v2H5a1 1 0 01-1-1zm9-2v3a1 1 0 01-1 1H9v-4h3zm2-1h-1v4h1a1 1 0 001-1v-3a1 1 0 00-1-1zm-3-4a1 1 0 00-2 0v4.586l-1.293-1.293a1 1 0 00-1.414 1.414l3 3c.39.39 1.024.39 1.414 0l3-3a1 1 0 10-1.414-1.414L11 11.586V7z" clipRule="evenodd" />
+    </svg>
+    No Products to Export
+  </button>
+) : (
+  // ✅ Active Export Button
   <button
     onClick={exportPDF}
-    title="Download Products Report"
     className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 text-white font-medium px-5 py-2.5 rounded-xl shadow-lg transition-all duration-300 ease-in-out"
   >
     <svg xmlns="http://www.w3.org/2000/svg" 
@@ -408,6 +429,8 @@ export default function ProductsPage(): JSX.Element {
     </svg>
     Download Products Report
   </button>
+)}
+
 </div>
 
 
