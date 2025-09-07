@@ -1,16 +1,30 @@
 // src/app/dashboard/billing/page.tsx
-
-
 "use client";
-
 import { useEffect, useState } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
 
-type Customer = { _id: string; name: string; contact?: string; address?: string };
-type Product = { _id: string; name: string; unit?: string; sellingPrice?: number; price?: number };
+type Customer = {
+  _id: string;
+  name: string;
+  contact?: string;
+  address?: string;
+  contacts?: string[];
+  shopName?: string;
+  shopAddress?: string;
+};
+
+type Product = {
+  _id: string;
+  name: string;
+  unit?: string;
+  sellingPrice?: number;
+  price?: number;
+};
+
 type SellerDetails = {
+  _id?: string;
   sellerName?: string;
   gstNumber?: string;
   fullAddress?: string;
@@ -19,13 +33,13 @@ type SellerDetails = {
   logoUrl?: string;
   qrCodeUrl?: string;
   signatureUrl?: string;
-  // optional bank fields (sometimes stored in seller-details)
   bankName?: string;
   branchName?: string;
   accountNumber?: string;
   ifscCode?: string;
   bankingName?: string;
 };
+
 type BankDetails = {
   bankName?: string;
   branchName?: string;
@@ -38,8 +52,8 @@ type BillItem = {
   productName: string;
   quantity: number;
   unit: string;
-  price: number; // always numeric
-  total: number; // always numeric (0 if free)
+  price: number;
+  total: number;
   free: boolean;
 };
 
@@ -56,7 +70,7 @@ export default function BillingPage() {
   const [billingCustomer, setBillingCustomer] = useState<Customer | null>(null);
   const [shippingCustomer, setShippingCustomer] = useState<Customer | null>(null);
   const [sameAsBilling, setSameAsBilling] = useState(false);
-  const [customerInput, setCustomerInput] = useState<string>(""); // text in the input
+  const [customerInput, setCustomerInput] = useState<string>("");
 
   // bill meta
   const [serialNo, setSerialNo] = useState<string>("");
@@ -82,7 +96,7 @@ export default function BillingPage() {
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [remarks, setRemarks] = useState<string>("");
 
-  // ===== Helpers to fetch and normalize API responses =====
+  // ===== Helpers =====
   const safeJson = async (res: Response) => {
     try {
       return await res.json();
@@ -91,7 +105,21 @@ export default function BillingPage() {
     }
   };
 
-  // load seller, customers, products, bank details and set serial/date
+  const generateSerial = () => {
+    // pattern: MM + 4-digit serial (per month, stored in localStorage)
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, "0"); // 01..12
+    const year = now.getFullYear();
+    const key = `serial-${month}-${year}`;
+    // stored value may be padded string like "0001"
+    let last = Number(localStorage.getItem(key) || "0");
+    last = last + 1;
+    if (last > 9999) last = 1;
+    localStorage.setItem(key, String(last).padStart(4, "0"));
+    return `${month}${String(last).padStart(4, "0")}`;
+  };
+
+  // ===== Load Data =====
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (!stored) {
@@ -101,60 +129,38 @@ export default function BillingPage() {
     const parsed = JSON.parse(stored);
     const userId = parsed._id;
 
-    // Seller details (may include bank fields)
+    // --- Fetch Seller ---
     fetch(`/api/seller-details?userId=${encodeURIComponent(userId)}`)
       .then((r) => safeJson(r))
       .then((s) => {
         if (s && !s.error) {
           setSeller(s);
-          // If seller doc also contains bank fields, pick them
-          const possibleBank: BankDetails = {
-            bankName: (s as any).bankName ?? (s as any).bank ?? undefined,
-            branchName: (s as any).branchName ?? undefined,
-            accountNumber: (s as any).accountNo ?? (s as any).accountNumber ?? undefined,
-            ifscCode: (s as any).ifscCode ?? undefined,
-            bankingName: (s as any).bankingName ?? undefined,
-          };
-          // if at least one bank field present, use it
-          if (possibleBank.bankName || possibleBank.accountNumber || possibleBank.ifscCode) {
-            setBank(possibleBank);
-          }
         }
       })
       .catch(() => {});
 
-    // Bank details endpoint fallback (if separate)
-    fetch(`/api/bank-details?sellerId=${encodeURIComponent(userId)}`)
-      .then((r) => safeJson(r))
-      .then((b) => {
-        if (b && !b.error) {
-          // Accept either an object or array
-          const bankObj: BankDetails = Array.isArray(b) ? b[0] ?? null : b;
-          if (bankObj) setBank(bankObj);
-        }
-      })
-      .catch(() => {});
-
-    // customers (API may return array or { customers: [...] })
+    // --- Fetch Customers ---
     fetch(`/api/customers?userId=${encodeURIComponent(userId)}`)
       .then((r) => safeJson(r))
       .then((data) => {
         if (!data) return;
-        if (Array.isArray(data)) {
-          setCustomers(data as Customer[]);
-        } else if (Array.isArray((data as any).customers)) {
-          setCustomers((data as any).customers as Customer[]);
-        } else if ((data as any).items && Array.isArray((data as any).items)) {
-          setCustomers((data as any).items as Customer[]);
-        } else {
-          // try to collect top-level fields (fallback)
-          const arr = Object.values(data).filter((v) => Array.isArray(v)).flat();
-          if (arr.length) setCustomers(arr[0] as Customer[]);
+        let arr: any[] = [];
+        if (Array.isArray(data)) arr = data;
+        else if (Array.isArray((data as any).customers)) arr = (data as any).customers;
+        else arr = Object.values(data).filter((v) => Array.isArray(v)).flat();
+        if (arr.length) {
+          const mapped = arr.map((c: any) => ({
+            _id: c._id,
+            name: c.name,
+            contact: Array.isArray(c.contacts) ? c.contacts[0] : c.contacts ?? c.contact ?? "",
+            address: c.shopAddress ?? c.address ?? c.shopAddress ?? "",
+          }));
+          setCustomers(mapped);
         }
       })
       .catch(() => {});
 
-    // products (API may return array or { products: [...] })
+    // --- Fetch Products ---
     fetch(`/api/products?userId=${encodeURIComponent(userId)}`)
       .then((r) => safeJson(r))
       .then((data) => {
@@ -164,22 +170,76 @@ export default function BillingPage() {
         } else if (Array.isArray((data as any).products)) {
           setProducts((data as any).products as Product[]);
         } else {
-          // fallback: try top-level arrays
           const arr = Object.values(data).filter((v) => Array.isArray(v)).flat();
           if (arr.length) setProducts(arr[0] as Product[]);
         }
       })
       .catch(() => {});
 
-    setSerialNo(`BILL-${Date.now()}`);
-    setDate(new Date().toLocaleDateString());
+    // --- Set Serial & Date ---
+    setSerialNo(generateSerial());
+    const now = new Date();
+    const formatted = `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
+    setDate(formatted);
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // --- Fetch Bank (Priority) based on seller._id (seller doc may not have _id until loaded)
+  useEffect(() => {
+    if (!seller?._id) {
+      // also attempt to pull bank fields out of seller doc if they exist
+      if (seller && (seller.bankName || (seller as any).accountNumber || (seller as any).accountNo || (seller as any).ifscCode)) {
+        const possibleBank: BankDetails = {
+          bankName: seller.bankName,
+          branchName: seller.branchName,
+          accountNumber: (seller as any).accountNumber ?? (seller as any).accountNo,
+          ifscCode: seller.ifscCode,
+          bankingName: seller.bankingName,
+        };
+        setBank(possibleBank);
+      }
+      return;
+    }
+
+    fetch(`/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`)
+      .then((r) => safeJson(r))
+      .then((b) => {
+        if (b && !b.error && Object.keys(b).length) {
+          // if API returns array or object, normalize
+          const bankObj: any = Array.isArray(b) ? b[0] ?? b : b;
+          setBank(bankObj);
+        } else {
+          // fallback to seller doc
+          const possibleBank: BankDetails = {
+            bankName: seller.bankName,
+            branchName: seller.branchName,
+            accountNumber: (seller as any).accountNumber ?? (seller as any).accountNo,
+            ifscCode: seller.ifscCode,
+            bankingName: seller.bankingName,
+          };
+          if (possibleBank.bankName || possibleBank.accountNumber) {
+            setBank(possibleBank);
+          }
+        }
+      })
+      .catch(() => {
+        const possibleBank: BankDetails = {
+          bankName: seller.bankName,
+          branchName: seller.branchName,
+          accountNumber: (seller as any).accountNumber ?? (seller as any).accountNo,
+          ifscCode: seller.ifscCode,
+          bankingName: seller.bankingName,
+        };
+        if (possibleBank.bankName || possibleBank.accountNumber) {
+          setBank(possibleBank);
+        }
+      });
+  }, [seller]);
 
   // when sameAsBilling toggled on, copy billing -> shipping
   useEffect(() => {
     if (sameAsBilling) setShippingCustomer(billingCustomer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sameAsBilling, billingCustomer]);
 
   // helper: rupee formatter
@@ -191,10 +251,7 @@ export default function BillingPage() {
       const newItems = prev.map((it) => ({ ...it }));
       const item = newItems[index];
       if (!item) return prev;
-
       Object.assign(item, changes);
-
-      // ensure numeric fields defined
       item.quantity = Number(item.quantity || 0);
       item.price = Number(item.price || 0);
 
@@ -202,7 +259,6 @@ export default function BillingPage() {
       if (changes.productName !== undefined && typeof changes.productName === "string" && changes.productName.trim() !== "") {
         const matched = products.find((p) => p.name.trim().toLowerCase() === changes.productName!.trim().toLowerCase());
         if (matched) {
-          // prefer sellingPrice then price then 0
           const selling = (matched as any).sellingPrice ?? (matched as any).price ?? 0;
           item.price = Number(selling || 0);
           item.unit = matched.unit ?? item.unit ?? "";
@@ -243,16 +299,12 @@ export default function BillingPage() {
       setBillingCustomer(null);
       return;
     }
-
-    // exact match
     const exact = customers.find((c) => c.name?.trim().toLowerCase() === cleaned);
     if (exact) {
       setBillingCustomer(exact);
       if (sameAsBilling) setShippingCustomer(exact);
       return;
     }
-
-    // partial matches
     const partial = customers.filter((c) => c.name?.toLowerCase().includes(cleaned));
     if (partial.length === 1) {
       setBillingCustomer(partial[0]);
@@ -262,58 +314,80 @@ export default function BillingPage() {
     }
   };
 
-  // product suggestion: handled by updateItem when productName changes
-
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <DashboardNavbar />
-      <main className="flex-grow container mx-auto px-6 py-8">
-        <div className="bg-white rounded-lg shadow p-6 text-gray-900">
-          <h1 className="text-3xl font-bold text-center mb-6">BILL OF SUPPLY</h1>
 
-          {/* HEADER */}
-          <div className="border-b pb-4 mb-6">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-4">
-                {seller?.logoUrl ? (
-                  <img src={seller.logoUrl} alt="logo" className="h-20 w-auto object-contain" />
-                ) : (
-                  <div className="h-20 w-20 rounded-md bg-gray-100 flex items-center justify-center text-sm text-gray-500">
-                    No Logo
-                  </div>
-                )}
-              </div>
-
-              <div className="flex-1 text-right">
-                <h2 className="text-xl font-bold">{seller?.sellerName || "Seller Name"}</h2>
-                <p className="text-sm">{seller?.contact || "-"}</p>
-                <p className="text-sm">{seller?.fullAddress || "-"}</p>
-                <p className="text-sm">GST: {seller?.gstNumber || "-"}</p>
-
+      {/* PRINT HEADER - fixed for printed pages; also visible on screen (kept at top of content) */}
+      <header className="bg-white border-b print:fixed print:top-0 print:left-0 print:right-0 print:shadow-sm print:bg-white">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-4">
+              {seller?.logoUrl ? (
+                <img src={seller.logoUrl} alt="logo" className="h-20 w-auto object-contain" />
+              ) : (
+                <div className="h-20 w-20 rounded-md bg-gray-100 flex items-center justify-center text-sm text-gray-500">
+                  No Logo
+                </div>
+              )}
+            </div>
+            <div className="flex-1 text-right">
+              <h2 className="text-xl font-bold">{seller?.sellerName || "Seller Name"}</h2>
+              <p className="text-sm">{seller?.contact || "-"}</p>
+              <p className="text-sm">{seller?.fullAddress || "-"}</p>
+              <p className="text-sm">GST: {seller?.gstNumber || "-"}</p>
+              <div className="mt-1">
+                <input
+                  value={fixedLine}
+                  onChange={(e) => setFixedLine(e.target.value)}
+                  className="hidden print:block w-full text-xs border-0 bg-transparent text-gray-700"
+                  readOnly
+                />
                 <textarea
                   value={fixedLine}
                   onChange={(e) => setFixedLine(e.target.value)}
-                  className="mt-2 w-full max-w-md text-sm border rounded p-2 text-gray-900"
+                  className="mt-2 w-full max-w-md text-sm border rounded p-2 text-gray-900 print:hidden"
                   rows={1}
                 />
               </div>
             </div>
-
-            {seller?.slogan && <p className="text-center text-sm font-medium mt-3">{seller.slogan}</p>}
           </div>
+          {seller?.slogan && <p className="text-center text-sm font-medium mt-3 print:block">{seller.slogan}</p>}
+        </div>
+      </header>
+
+      {/* MAIN content: add top margin when printing to avoid overlap with fixed header */}
+      <main className="flex-grow container mx-auto px-6 py-8 print:mt-44 print:mb-32">
+        <div className="bg-white rounded-lg shadow p-6 text-gray-900">
+          <h1 className="text-3xl font-bold text-center mb-6">BILL OF SUPPLY</h1>
 
           {/* BILLING / SHIPPING */}
           <div className="grid grid-cols-2 gap-6 mb-4">
             <div>
               <h3 className="text-sm font-semibold mb-1">Billing Details</h3>
 
-              <input
-                list="customer-suggestions"
-                value={customerInput}
-                onChange={(e) => onCustomerInputChange(e.target.value)}
-                placeholder="Type or pick a customer name..."
-                className="w-full border p-2 rounded text-gray-900"
-              />
+              {/* input + suggestions (print:hidden) */}
+              <div className="flex gap-2">
+                <input
+                  suppressHydrationWarning
+                  list="customer-suggestions"
+                  value={customerInput}
+                  onChange={(e) => onCustomerInputChange(e.target.value)}
+                  placeholder="Type or pick a customer name..."
+                  className="w-full border p-2 rounded text-gray-900 print:hidden"
+                />
+                <button
+                  onClick={() => {
+                    // quick clear selection
+                    setCustomerInput("");
+                    setBillingCustomer(null);
+                  }}
+                  className="px-3 py-2 bg-gray-200 rounded text-sm print:hidden"
+                >
+                  Clear
+                </button>
+              </div>
+
               <datalist id="customer-suggestions">
                 {customers.map((c) => (
                   <option key={c._id} value={c.name} />
@@ -329,31 +403,36 @@ export default function BillingPage() {
 
             <div>
               <h3 className="text-sm font-semibold mb-1">Shipping Details</h3>
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm print:hidden">
                 <input type="checkbox" checked={sameAsBilling} onChange={(e) => setSameAsBilling(e.target.checked)} />
                 Same as Billing
               </label>
 
               {!sameAsBilling && (
-                <>
-                  <input
-                    list="customer-suggestions"
-                    placeholder="Type or pick shipping customer (optional)"
-                    className="w-full border p-2 rounded text-gray-900 mt-2"
-                    onBlur={(e) => {
-                      const val = e.currentTarget.value.trim().toLowerCase();
-                      if (!val) return;
-                      const match = customers.find((c) => c.name?.trim().toLowerCase() === val);
-                      if (match) setShippingCustomer(match);
-                    }}
-                  />
-                </>
+                <input
+                  suppressHydrationWarning
+                  list="customer-suggestions"
+                  placeholder="Type or pick shipping customer (optional)"
+                  className="w-full border p-2 rounded text-gray-900 mt-2 print:hidden"
+                  onBlur={(e) => {
+                    const val = e.currentTarget.value.trim().toLowerCase();
+                    if (!val) return;
+                    const match = customers.find((c) => c.name?.trim().toLowerCase() === val);
+                    if (match) setShippingCustomer(match);
+                  }}
+                />
               )}
 
               <div className="mt-2 text-sm text-gray-800">
-                <div><strong>Name:</strong> {sameAsBilling ? (billingCustomer?.name || "-") : (shippingCustomer?.name || "-")}</div>
-                <div><strong>Address:</strong> {sameAsBilling ? (billingCustomer?.address || "-") : (shippingCustomer?.address || "-")}</div>
-                <div><strong>Contact:</strong> {sameAsBilling ? (billingCustomer?.contact || "-") : (shippingCustomer?.contact || "-")}</div>
+                <div>
+                  <strong>Name:</strong> {sameAsBilling ? (billingCustomer?.name || "-") : (shippingCustomer?.name || "-")}
+                </div>
+                <div>
+                  <strong>Address:</strong> {sameAsBilling ? (billingCustomer?.address || "-") : (shippingCustomer?.address || "-")}
+                </div>
+                <div>
+                  <strong>Contact:</strong> {sameAsBilling ? (billingCustomer?.contact || "-") : (shippingCustomer?.contact || "-")}
+                </div>
               </div>
             </div>
           </div>
@@ -374,7 +453,7 @@ export default function BillingPage() {
                   <th className="border px-2 py-2">Quantity</th>
                   <th className="border px-2 py-2">Price</th>
                   <th className="border px-2 py-2">Total</th>
-                  <th className="border px-2 py-2">Free</th>
+                  <th className="border px-2 py-2 print:hidden">Free</th>
                 </tr>
               </thead>
               <tbody>
@@ -384,6 +463,7 @@ export default function BillingPage() {
 
                     <td className="border px-2 py-1">
                       <input
+                        suppressHydrationWarning
                         list="product-suggestions"
                         value={it.productName}
                         onChange={(e) => updateItem(idx, { productName: e.target.value })}
@@ -394,6 +474,7 @@ export default function BillingPage() {
 
                     <td className="border px-2 py-1 text-center">
                       <input
+                        suppressHydrationWarning
                         type="number"
                         min={0}
                         step="any"
@@ -409,6 +490,7 @@ export default function BillingPage() {
                       ) : (
                         <div className="flex items-center justify-center gap-2">
                           <input
+                            suppressHydrationWarning
                             type="number"
                             min={0}
                             step="any"
@@ -425,7 +507,7 @@ export default function BillingPage() {
                       {it.free ? <span className="font-semibold text-red-600">FREE</span> : <span>{fmt(it.total)}</span>}
                     </td>
 
-                    <td className="border px-2 py-1 text-center">
+                    <td className="border px-2 py-1 text-center print:hidden">
                       <input type="checkbox" checked={it.free} onChange={(e) => toggleFree(idx, e.target.checked)} />
                     </td>
                   </tr>
@@ -448,8 +530,8 @@ export default function BillingPage() {
             </datalist>
 
             <div className="mt-3 flex items-center gap-3">
-              <button onClick={addLine} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">+ Add Line</button>
-              <p className="text-xs text-gray-500">You can add more lines (default 15 lines shown). Selecting a suggested product will auto-fill price/unit (editable).</p>
+              <button onClick={addLine} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 print:hidden">+ Add Line</button>
+              <p className="text-xs text-gray-500 print:hidden">You can add more lines (default 15 lines shown). Selecting a suggested product will auto-fill price/unit (editable).</p>
             </div>
           </div>
 
@@ -457,7 +539,16 @@ export default function BillingPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
               <label className="text-sm font-medium">Discount (%)</label>
-              <input type="number" min={0} max={100} step="any" value={discountPercent} onChange={(e) => setDiscountPercent(Number(e.target.value || 0))} className="w-28 border rounded px-2 py-1 text-gray-900" />
+              <input
+                suppressHydrationWarning
+                type="number"
+                min={0}
+                max={100}
+                step="any"
+                value={discountPercent}
+                onChange={(e) => setDiscountPercent(Number(e.target.value || 0))}
+                className="w-28 border rounded px-2 py-1 text-gray-900"
+              />
             </div>
 
             <div className="text-right">
@@ -469,7 +560,6 @@ export default function BillingPage() {
           {/* FOOTER - Payment & Banking */}
           <div className="border-t pt-4">
             <h3 className="text-sm font-semibold mb-2">Payment & Banking</h3>
-
             <div className="grid md:grid-cols-3 gap-4">
               <div className="text-sm">
                 <div><strong>Bank:</strong> {bank?.bankName || seller?.bankName || "-"}</div>
@@ -490,18 +580,31 @@ export default function BillingPage() {
             </div>
 
             <div className="mt-3">
-              <textarea placeholder="Remarks / Note (optional)" value={remarks} onChange={(e) => setRemarks(e.target.value)} className="w-full border rounded p-2 text-gray-900" rows={2} />
+              <textarea
+                suppressHydrationWarning
+                placeholder="Remarks / Note (optional)"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                className="w-full border rounded p-2 text-gray-900"
+                rows={2}
+              />
             </div>
           </div>
 
-          {/* ACTIONS */}
-          <div className="mt-4 flex items-center justify-end gap-3">
+          {/* ACTIONS - screen only */}
+          <div className="mt-4 flex items-center justify-end gap-3 print:hidden">
             <button onClick={() => toast.success("Bill prepared (not persisted). Use Export to PDF / Print to save.")} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">✅ Prepare Bill</button>
-
             <button onClick={() => window.print()} className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">🖨️ Print / Export</button>
           </div>
         </div>
       </main>
+
+      {/* PRINT FOOTER - fixed bottom when printing */}
+      <footer className="hidden print:block print:fixed print:bottom-0 print:left-0 print:right-0 bg-white p-2 text-center text-xs border-t">
+        <div className="max-w-7xl mx-auto px-6">
+          <p>{seller?.slogan || "Thank you for your business!"}</p>
+        </div>
+      </footer>
 
       <Footer />
     </div>
