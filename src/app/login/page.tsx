@@ -1,7 +1,7 @@
-// icecream-inventory\src\app\login\page.tsx
+// icecream-inventory/src/app/login/page.tsx
 
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -12,7 +12,17 @@ import "react-toastify/dist/ReactToastify.css";
 
 export default function LoginPage() {
   const [form, setForm] = useState({ email: "", password: "" });
+  const [rememberMe, setRememberMe] = useState(false);
   const router = useRouter();
+
+  // ✅ If user already logged in (with rememberMe), redirect
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    const remember = localStorage.getItem("rememberMe");
+    if (storedUser && remember === "true") {
+      router.push("/dashboard");
+    }
+  }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -32,6 +42,9 @@ export default function LoginPage() {
       // ✅ Save user session in localStorage
       localStorage.setItem("user", JSON.stringify(data.user));
 
+      // ✅ Save rememberMe flag
+      localStorage.setItem("rememberMe", rememberMe ? "true" : "false");
+
       toast.success("Login successful! Redirecting...");
       setTimeout(() => router.push("/dashboard"), 2000);
     } else {
@@ -45,7 +58,6 @@ export default function LoginPage() {
 
       <main className="flex-grow flex items-center justify-center">
         <div className="flex w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden">
-          
           {/* Left Side */}
           <div className="hidden md:flex flex-col justify-center items-center bg-blue-600 text-white p-10 w-1/2">
             <h2 className="text-4xl font-extrabold mb-4">Welcome Back!</h2>
@@ -88,6 +100,18 @@ export default function LoginPage() {
                     placeholder-gray-500 text-gray-900 text-base"
                   required
                 />
+              </div>
+
+              {/* Remember Me */}
+              <div className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  id="rememberMe"
+                  className="h-4 w-4"
+                />
+                <label htmlFor="rememberMe">Remember Me</label>
               </div>
 
               {/* Submit Button */}
