@@ -363,188 +363,296 @@ export default function BillingPage() {
 
   
 // inside BillingPage component
-const exportPDF = () => {
+const exportPDF = async () => {
+  // helper to fetch an image URL and convert to dataURL (returns null on failure)
+  const fetchImageAsDataURL = async (url?: string | null) => {
+    if (!url) return null;
+    try {
+      if (url.startsWith("data:")) return url;
+      const resp = await fetch(url, { cache: "no-store" });
+      if (!resp.ok) return null;
+      const blob = await resp.blob();
+      return await new Promise<string | null>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : null);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // prepare images
+  const logoDataUrl = await fetchImageAsDataURL(seller?.logoUrl ?? null);
+  const qrDataUrl = await fetchImageAsDataURL(seller?.qrCodeUrl ?? null);
+  const sigDataUrl = await fetchImageAsDataURL(seller?.signatureUrl ?? null);
+
+  // create doc
   const doc = new jsPDF("p", "pt", "a4");
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
 
-  // ===== HEADER =====
-  const header = () => {
-    doc.setFontSize(16).setFont("helvetica", "bold");
-    doc.text("BILL OF SUPPLY", pageWidth / 2, 40, { align: "center" });
+  // margins
+  const M = { left: 40, right: 40, top: 40, bottom: 60 };
+
+  // header drawing (called per page later)
+  const drawHeader = (currentPage: number, totalPages: number) => {
     doc.setDrawColor(0);
-    doc.line(40, 55, pageWidth - 40, 55);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    const sellerName = seller?.sellerName?.toUpperCase() || "SELLER NAME";
+    doc.text(sellerName, pageWidth / 2, M.top + 6, { align: "center" });
+
+    doc.setFont("helvetica", "normal").setFontSize(10);
+    const addr = seller?.fullAddress || "-";
+    const contact = seller?.contact ? `Contact: ${seller.contact}` : "";
+    const gst = seller?.gstNumber ? `GSTIN: ${seller.gstNumber}` : "";
+    const headerYStart = M.top + 26;
+    const headerText = `${addr}${contact ? " • " + contact : ""}${gst ? " • " + gst : ""}`;
+
+    doc.text(headerText, pageWidth / 2, headerYStart, {
+      align: "center",
+      maxWidth: pageWidth - M.left - M.right,
+    });
+
+    doc.setFont("helvetica", "bold").setFontSize(14);
+    doc.text("BILL OF SUPPLY", pageWidth / 2, headerYStart + 20, { align: "center" });
+    doc.setLineWidth(0.8);
+    doc.line(M.left, headerYStart + 24, pageWidth - M.right, headerYStart + 24);
+
+    // logo left
+    if (logoDataUrl) {
+      try {
+        doc.addImage(logoDataUrl, "PNG", M.left, M.top - 2, 60, 60);
+      } catch {}
+    }
+
+    // page number top-right
+    doc.setFont("helvetica", "normal").setFontSize(9);
+    doc.text(`Page ${currentPage} / ${totalPages}`, pageWidth - M.right, M.top + 6, { align: "right" });
   };
 
-  // ===== FOOTER =====
-  const footer = (pageNumber: number, totalPages: number) => {
+  // footer drawing (called per page later)
+  const drawFooter = (pageNumber: number, totalPages: number) => {
     doc.setDrawColor(200);
-    doc.line(40, pageHeight - 50, pageWidth - 40, pageHeight - 50);
-    doc.setFontSize(9).setTextColor(100);
-    doc.text(
-      seller?.slogan || "Thank you for your business!",
-      pageWidth / 2,
-      pageHeight - 35,
-      { align: "center" }
-    );
-    doc.text(`Page ${pageNumber} of ${totalPages}`, pageWidth - 80, pageHeight - 35);
+    const y = pageHeight - 45;
+    doc.line(M.left, y, pageWidth - M.right, y);
+    doc.setFont("helvetica", "normal").setFontSize(9);
+    doc.text(seller?.slogan || "Thank you for your business!", pageWidth / 2, y + 15, {
+      align: "center",
+      maxWidth: pageWidth - M.left - M.right,
+    });
   };
 
-  let y = 70;
-
-  // ===== SELLER DETAILS =====
-  doc.rect(40, y, pageWidth - 80, 80);
-  if (seller?.logoUrl) {
-    try {
-      doc.addImage(seller.logoUrl, "PNG", 45, y + 10, 60, 60);
-    } catch {}
-  }
-  doc.setFontSize(12).setFont("helvetica", "bold");
-  doc.text(seller?.sellerName || "Seller Name", 120, y + 25);
-  doc.setFontSize(10).setFont("helvetica", "normal");
-  doc.text(seller?.fullAddress || "-", 120, y + 40);
-  doc.text(`GST: ${seller?.gstNumber || "-"}`, 120, y + 55);
-  y += 100;
-
-  // ===== BILLING / SHIPPING =====
-  doc.rect(40, y, pageWidth - 80, 90);
-  doc.line(pageWidth / 2, y, pageWidth / 2, y + 90);
-
-  doc.setFont("helvetica", "bold").setFontSize(12);
-  doc.text("Billing Details", 50, y + 20);
-  doc.text("Shipping Details", pageWidth / 2 + 10, y + 20);
-
-  doc.setFont("helvetica", "normal").setFontSize(10);
-  doc.text(`Name: ${billingCustomer?.name || "-"}`, 50, y + 40);
-  doc.text(
-    `Name: ${sameAsBilling ? billingCustomer?.name || "-" : shippingCustomer?.name || "-"}`,
-    pageWidth / 2 + 10,
-    y + 40
-  );
-  doc.text(`Address: ${billingCustomer?.address || "-"}`, 50, y + 55);
-  doc.text(
-    `Address: ${sameAsBilling ? billingCustomer?.address || "-" : shippingCustomer?.address || "-"}`,
-    pageWidth / 2 + 10,
-    y + 55
-  );
-  doc.text(`Contact: ${billingCustomer?.contact || "-"}`, 50, y + 70);
-  doc.text(
-    `Contact: ${sameAsBilling ? billingCustomer?.contact || "-" : shippingCustomer?.contact || "-"}`,
-    pageWidth / 2 + 10,
-    y + 70
-  );
-
-  y += 110;
-
-  // ===== SERIAL + DATE =====
-  doc.rect(40, y, pageWidth - 80, 30);
-  doc.setFontSize(10).setFont("helvetica", "normal");
-  doc.text(`Serial No: ${serialNo}`, 50, y + 20);
-  doc.text(`Date: ${date}`, pageWidth - 200, y + 20);
-  y += 50;
-
-  // ===== ITEMS TABLE =====
+  // build rows from items
   const filledItems = items.filter(
-    (it) => it.productName || it.quantity || it.price || it.total
+    (it) => (it.productName && it.productName.trim() !== "") || (it.quantity && it.quantity > 0) || it.free
   );
+
   const tableBody = filledItems.map((it, idx) => [
-    idx + 1,
+    `${idx + 1}`,
     it.productName || "-",
-    it.quantity,
+    it.quantity ? String(it.quantity) : "-",
     it.unit || "-",
-    it.free ? "FREE" : `Rs ${Number(it.price || 0).toFixed(2)}`,
-    it.free ? "FREE" : `Rs ${Number(it.total || 0).toFixed(2)}`,
+    it.free ? "FREE" : `${Number(it.price || 0).toFixed(2)}`,
+    it.free ? "FREE" : `${Number(it.total || 0).toFixed(2)}`,
   ]);
 
-  const subTotal = filledItems.reduce(
-    (acc, it) => acc + (it.free ? 0 : Number(it.total || 0)),
-    0
-  );
-  const discounted = subTotal - (subTotal * (discountPercent || 0)) / 100;
+  const subtotal = filledItems.reduce((acc, it) => acc + (it.free ? 0 : Number(it.total || 0)), 0);
+  const discountAmount = (subtotal * (discountPercent || 0)) / 100;
+  const grandTotal = subtotal - discountAmount;
 
+  // start position (below header)
+  const contentStartY = M.top + 70;
+  let cursorY = contentStartY;
+
+  // Billing & Shipping boxes side-by-side
+  const boxHeight = 72;
+  const gap = 12;
+  const boxWidth = (pageWidth - M.left - M.right - gap) / 2;
+  doc.setLineWidth(0.7);
+  doc.rect(M.left, cursorY, boxWidth, boxHeight);
+  doc.rect(M.left + boxWidth + gap, cursorY, boxWidth, boxHeight);
+
+  doc.setFont("helvetica", "bold").setFontSize(11);
+  doc.text("Billing Details", M.left + 8, cursorY + 16);
+  doc.text("Shipping Details", M.left + boxWidth + gap + 8, cursorY + 16);
+
+  doc.setFont("helvetica", "normal").setFontSize(10);
+  const billName = billingCustomer?.name || "-";
+  const billAddr = billingCustomer?.address || "-";
+  const billContact = billingCustomer?.contact || "-";
+  doc.text(`Name: ${billName}`, M.left + 8, cursorY + 34);
+  doc.text(`Address: ${billAddr}`, M.left + 8, cursorY + 48, { maxWidth: boxWidth - 16 });
+  doc.text(`Contact: ${billContact}`, M.left + 8, cursorY + 63);
+
+  const shipName = sameAsBilling ? billName : shippingCustomer?.name || "-";
+  const shipAddr = sameAsBilling ? billAddr : shippingCustomer?.address || "-";
+  const shipContact = sameAsBilling ? billContact : shippingCustomer?.contact || "-";
+  doc.text(`Name: ${shipName}`, M.left + boxWidth + gap + 8, cursorY + 34);
+  doc.text(`Address: ${shipAddr}`, M.left + boxWidth + gap + 8, cursorY + 48, { maxWidth: boxWidth - 16 });
+  doc.text(`Contact: ${shipContact}`, M.left + boxWidth + gap + 8, cursorY + 63);
+
+  cursorY += boxHeight + 12;
+
+  // Serial & Date box spanning width
+  doc.rect(M.left, cursorY, pageWidth - M.left - M.right, 28);
+  doc.setFontSize(10).setFont("helvetica", "normal");
+  doc.text(`Serial No: ${serialNo || "-"}`, M.left + 8, cursorY + 18);
+  doc.text(`Date: ${date || "-"}`, pageWidth - M.right - 120, cursorY + 18);
+  cursorY += 40;
+
+  // Add items table using autoTable
+  const tableStartY = cursorY;
   autoTable(doc, {
-    head: [["#", "Product", "Qty", "Unit", "Price", "Total"]],
+    startY: tableStartY,
+    head: [["#", "Particulars", "Qty", "Unit", "Price(Rs.)", "Total(Rs.)"]],
     body: [
       ...tableBody,
       [
         { content: "Subtotal", colSpan: 5, styles: { halign: "right", fontStyle: "bold" } },
-        `Rs ${subTotal.toFixed(2)}`,
+        { content: `${subtotal.toFixed(2)}`, styles: { halign: "center", fontStyle: "bold" } },
       ],
       [
-        { content: `Discount (${discountPercent}%)`, colSpan: 5, styles: { halign: "right" } },
-        `Rs ${(subTotal - discounted).toFixed(2)}`,
+        { content: `Discount (${discountPercent || 0}%)`, colSpan: 5, styles: { halign: "right" } },
+        { content: `${discountAmount.toFixed(2)}`, styles: { halign: "center" } },
       ],
       [
-        { content: "Grand Total", colSpan: 5, styles: { halign: "right", fontStyle: "bold" } },
-        `Rs ${discounted.toFixed(2)}`,
+        { content: "Total", colSpan: 5, styles: { halign: "right", fontStyle: "bold" } },
+        { content: `${grandTotal.toFixed(2)}`, styles: { halign: "center", fontStyle: "bold" } },
       ],
     ],
-    startY: y,
     theme: "grid",
-    styles: { fontSize: 10, cellPadding: 4, halign: "center" },
-    headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
-    didDrawPage: () => header(),
-    margin: { top: 100, bottom: 120 },
+    styles: { fontSize: 10, cellPadding: 6, halign: "center", valign: "middle" },
+    headStyles: { fillColor: [220, 220, 220], textColor: [20, 20, 20], fontStyle: "bold" },
+    columnStyles: { 1: { halign: "left" }, 2: { halign: "center" }, 3: { halign: "center" }, 4: { halign: "center" }, 5: { halign: "center" } },
+    margin: { left: M.left, right: M.right },
   });
 
-  let finalY = (doc as any).lastAutoTable.finalY + 20;
+  // finalY after table
+  const finalY = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 12 : cursorY + 12;
 
-  // ===== FIXED LINE (composition note) =====
+  // Fixed line / composition note
   doc.setFont("helvetica", "italic").setFontSize(10);
-  doc.text(
-    fixedLine ||
-      "composition taxable person not eligible to collect taxes on supplies",
-    50,
-    finalY,
-    { maxWidth: pageWidth - 100 }
-  );
-  finalY += 25;
+  const fixedNote = fixedLine || "composition taxable person not eligible to collect taxes on supplies";
+  doc.text(fixedNote, M.left, finalY, { maxWidth: pageWidth - M.left - M.right });
 
-  // ===== PAYMENT & BANKING =====
-  doc.rect(40, finalY, pageWidth - 80, 120);
+  let bankY = finalY + 26;
+
+  // Payment & Banking box
+  const bankBoxHeight = 110;
+  doc.setDrawColor(0);
+  doc.rect(M.left, bankY, pageWidth - M.left - M.right, bankBoxHeight);
+
   doc.setFont("helvetica", "bold").setFontSize(12);
-  doc.text("Payment & Banking Details", 50, finalY + 20);
+  doc.text("Payment & Banking Details", M.left + 8, bankY + 18);
 
   doc.setFont("helvetica", "normal").setFontSize(10);
-  doc.text(`Bank: ${bank?.bankName || "-"}`, 50, finalY + 40);
-  doc.text(`Branch: ${bank?.branchName || "-"}`, 50, finalY + 55);
-  doc.text(`Account No: ${bank?.accountNumber || "-"}`, 50, finalY + 70);
-  doc.text(`IFSC: ${bank?.ifscCode || "-"}`, 50, finalY + 85);
-  doc.text(`In Favour of: ${bank?.bankingName || "-"}`, 50, finalY + 100);
+  const bankNameText = bank?.bankName || seller?.bankName || "-";
+  const branchText = bank?.branchName || seller?.branchName || "-";
+  const accNoText = bank?.accountNumber || (seller as any)?.accountNo || "-";
+  const ifscText = bank?.ifscCode || (seller as any)?.ifscCode || "-";
+  const inFavorText = bank?.bankingName || seller?.bankingName || "-";
 
-  if (seller?.qrCodeUrl) {
+  doc.text(`Bank: ${bankNameText}`, M.left + 8, bankY + 36);
+  doc.text(`Branch: ${branchText}`, M.left + 8, bankY + 52);
+  doc.text(`Account no.: ${accNoText}`, M.left + 8, bankY + 68);
+  doc.text(`IFSC: ${ifscText}`, M.left + 8, bankY + 84);
+  doc.text(`In favour of: ${inFavorText}`, M.left + 8, bankY + 100);
+
+  // --- NEW: place QR to the LEFT of signature (side-by-side) to avoid overlap ---
+  // signature anchored bottom-right
+  const sigW = 120;
+  const sigH = 50;
+  const sigRightPadding = 10;
+  const sigX = pageWidth - M.right - sigW - sigRightPadding;
+  const sigY = bankY + bankBoxHeight - sigH - 12;
+
+  // QR placed to left of signature with small gap
+  const qrW = 70; // smaller QR width
+  const qrH = 70; // smaller QR height
+  const qrGap = 8;
+  const qrX = sigX - qrW - qrGap;
+  const qrY = bankY + 12; // keep QR near top of bank box (not overlapping vertically with signature)
+
+  // Make sure QR doesn't go beyond left margin — fallback: move QR to left area inside bank box
+  if (qrX < M.left + 200) {
+    // if too left, place QR beneath bank details but left-aligned within bank box
+    // we keep a margin of 200 so the bank details remain readable
+    // fallback position:
+    const altQrX = pageWidth - M.right - qrW - sigRightPadding - 0; // near right but before signature
+    // ensure altQrX >= M.left
+    if (altQrX >= M.left) {
+      // reposition qrX horizontally but lower vertically to avoid overlap
+      // put it just above signature top if space
+      const altQrY = Math.max(bankY + 8, sigY - qrH - 6);
+      // apply alt
+      // Note: prefer not to overlap with signature; if unavoidable it will sit left of signature
+      if (qrDataUrl) {
+        try {
+          doc.addImage(qrDataUrl, "PNG", altQrX, altQrY, qrW, qrH);
+        } catch {}
+      }
+    }
+  } else {
+    if (qrDataUrl) {
+      try {
+        doc.addImage(qrDataUrl, "PNG", qrX, qrY, qrW, qrH);
+      } catch {}
+    }
+  }
+
+  // Add signature (bottom-right)
+  if (sigDataUrl) {
     try {
-      doc.addImage(seller.qrCodeUrl, "PNG", 300, finalY + 20, 100, 100);
+      doc.addImage(sigDataUrl, "PNG", sigX, sigY, sigW, sigH);
     } catch {}
   }
-  if (seller?.signatureUrl) {
-    try {
-      doc.addImage(seller.signatureUrl, "PNG", pageWidth - 180, finalY + 20, 120, 60);
-      doc.setFontSize(10).text("Authorized Signature", pageWidth - 120, finalY + 90, {
-        align: "center",
-      });
-    } catch {}
+
+  // small label above the signature (like your screenshot)
+  doc.setFont("helvetica", "italic").setFontSize(8);
+  const sigLabelX = sigX + sigW / 2;
+  doc.text("Signature of the Supplier (required)", sigLabelX, sigY - 6, { align: "center" });
+
+  // Authorized Signatory text to the extreme right under a thin underline (mimic sample)
+  const authX = pageWidth - M.right;
+  const authY = bankY + bankBoxHeight + 8;
+  const underlineW = 140;
+  const underlineLeft = authX - underlineW - 10;
+  doc.setLineWidth(0.5);
+  doc.line(underlineLeft, authY - 6, underlineLeft + underlineW, authY - 6);
+  doc.setFont("helvetica", "bold").setFontSize(10);
+  doc.text("Authorized Signatory", authX - 10, authY + 2, { align: "right" });
+
+  // Remarks (if any)
+  let afterBankY = bankY + bankBoxHeight + 18;
+  if (remarks && remarks.trim()) {
+    doc.setFont("helvetica", "bold").setFontSize(11);
+    doc.text("Remarks:", M.left, afterBankY);
+    doc.setFont("helvetica", "normal").setFontSize(10);
+    doc.text(remarks, M.left, afterBankY + 16, { maxWidth: pageWidth - M.left - M.right });
+    afterBankY += 36;
   }
 
-  // ===== REMARKS =====
-  if (remarks) {
-    finalY += 140;
-    doc.setFont("helvetica", "bold").text("Remarks:", 40, finalY);
-    doc.setFont("helvetica", "normal").text(remarks, 40, finalY + 15, {
-      maxWidth: pageWidth - 80,
-    });
-  }
+  // Serial & Date repeated at bottom
+  doc.setFont("helvetica", "normal").setFontSize(10);
+  doc.text(`Serial no. ${serialNo || "-"}`, M.left, pageHeight - M.bottom + 8);
+  doc.text(`Date: ${date || "-"}`, pageWidth - M.right - 120, pageHeight - M.bottom + 8);
 
-  // ===== FOOTER =====
-  const totalPages = (doc as any).internal.getNumberOfPages();
+  // Add header & footer on each page (use any-cast for getNumberOfPages)
+  const totalPages = (doc.internal as any).getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
-    footer(i, totalPages);
+    drawHeader(i, totalPages);
+    drawFooter(i, totalPages);
   }
 
-  doc.save(`Bill_${serialNo || "invoice"}.pdf`);
+  // save
+  const safeSerial = serialNo || "invoice";
+  doc.save(`Bill_${safeSerial}.pdf`);
 };
+
 
 
   
