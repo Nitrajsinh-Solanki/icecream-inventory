@@ -1,8 +1,12 @@
 // icecream-inventory/src/app/components/DashboardNavbar.tsx
 
+
+
+
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Package,
@@ -32,10 +36,13 @@ export default function DashboardNavbar() {
           href="/dashboard"
           className="flex items-center space-x-2 hover:opacity-90 transition"
         >
-          <img
+          <Image
             src="/logo.png"
             alt="Logo"
-            className="h-10 w-10 object-contain rounded-full border border-white shadow-md"
+            width={40}
+            height={40}
+            className="object-contain rounded-full border border-white shadow-md"
+            priority
           />
           <span className="font-bold text-xl text-white tracking-wide">
             IceCream Inventory
@@ -73,7 +80,9 @@ export default function DashboardNavbar() {
             <UserCircle
               size={32}
               className={
-                pathname === "/dashboard/profile" ? "text-blue-700" : "text-white"
+                pathname === "/dashboard/profile"
+                  ? "text-blue-700"
+                  : "text-white"
               }
             />
           </Link>

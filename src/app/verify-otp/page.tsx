@@ -1,19 +1,17 @@
 // icecream-inventory\src\app\verify-otp\page.tsx
 
-
 "use client";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-export default function VerifyOtpPage() {
+function VerifyOtpContent() {
   const params = useSearchParams();
   const router = useRouter();
   const email = params.get("email") || "";
-
   const [otp, setOtp] = useState("");
 
   const handleVerify = async () => {
@@ -50,13 +48,16 @@ export default function VerifyOtpPage() {
             Verify Your Email
           </h2>
           <p className="text-center text-gray-600 mb-6 text-sm">
-            We’ve sent a 6-digit OTP to <span className="font-semibold">{email}</span>.
+            We’ve sent a 6-digit OTP to{" "}
+            <span className="font-semibold">{email}</span>.
           </p>
 
           <div className="space-y-5">
             {/* OTP Input */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Enter OTP</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Enter OTP
+              </label>
               <input
                 type="text"
                 value={otp}
@@ -91,5 +92,13 @@ export default function VerifyOtpPage() {
       <Footer />
       <ToastContainer />
     </div>
+  );
+}
+
+export default function VerifyOtpPage() {
+  return (
+    <Suspense fallback={<div className="text-center mt-10 text-gray-500">Loading...</div>}>
+      <VerifyOtpContent />
+    </Suspense>
   );
 }

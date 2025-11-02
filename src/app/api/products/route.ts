@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     await connectDB();
     const newProduct = await Product.create(body);
     return NextResponse.json(newProduct, { status: 201 });
-  } catch (err) {
+  } catch  {
     return NextResponse.json({ error: "Failed to add product" }, { status: 500 });
   }
 }
@@ -39,7 +39,7 @@ export async function GET(req: Request) {
     await connectDB();
     const products = await Product.find({ userId }).sort({ createdAt: -1 });
     return NextResponse.json(products);
-  } catch (err) {
+  } catch  {
     return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
   }
 }
@@ -65,7 +65,7 @@ export async function PUT(req: Request) {
     }
 
     return NextResponse.json(updated);
-  } catch (err) {
+  } catch  {
     return NextResponse.json({ error: "Failed to update product" }, { status: 500 });
   }
 }
@@ -88,7 +88,7 @@ export async function DELETE(req: Request) {
     }
 
     return NextResponse.json({ success: true, id });
-  } catch (err) {
+  } catch  {
     return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });
   }
 }

@@ -24,7 +24,7 @@ export async function POST(req: Request) {
       const created = await SellerDetails.create(body);
       return NextResponse.json(created, { status: 201 });
     }
-  } catch (err) {
+  } catch  {
     return NextResponse.json({ error: "Failed to save seller details" }, { status: 500 });
   }
 }
@@ -38,7 +38,7 @@ export async function GET(req: Request) {
 
     const details = await SellerDetails.findOne({ userId });
     return NextResponse.json(details || {});
-  } catch (err) {
+  } catch  {
     return NextResponse.json({ error: "Failed to fetch seller details" }, { status: 500 });
   }
 }

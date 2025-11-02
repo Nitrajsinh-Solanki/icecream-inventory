@@ -1,7 +1,5 @@
 // icecream-inventory\src\app\api\restockHistory\route.ts
 
-
-
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import RestockHistory from "@/models/RestockHistory";
@@ -17,8 +15,9 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(history, { status: 201 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal Server Error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -28,11 +27,13 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
 
-    if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
+    if (!userId)
+      return NextResponse.json({ error: "userId required" }, { status: 400 });
 
     const history = await RestockHistory.find({ userId }).sort({ createdAt: -1 });
     return NextResponse.json(history, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal Server Error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

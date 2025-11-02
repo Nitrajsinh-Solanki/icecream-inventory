@@ -31,7 +31,7 @@ export async function POST(req: Request) {
       message: "Login successful",
       user: userObj,
     });
-  } catch (err) {
+  } catch  {
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

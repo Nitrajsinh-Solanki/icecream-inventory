@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   try {
     await connectDB();
     const body = await req.json();
-    const { name, contacts, shopName, shopAddress, location, userId } = body;
+    const { name, contacts, shopName, shopAddress,  userId } = body;
 
     if (!name || !contacts?.length || !shopName || !shopAddress || !userId) {
       return NextResponse.json(
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(customer, { status: 201 });
-  } catch (err) {
+  } catch{
     return NextResponse.json({ error: "Failed to add customer" }, { status: 500 });
   }
 }
@@ -44,7 +44,7 @@ export async function GET(req: Request) {
 
     const customers = await Customer.find({ userId }).sort({ createdAt: -1 });
     return NextResponse.json(customers);
-  } catch (err) {
+  } catch  {
     return NextResponse.json({ error: "Failed to fetch customers" }, { status: 500 });
   }
 }
@@ -73,7 +73,7 @@ export async function PUT(req: Request) {
     }
 
     return NextResponse.json(updated);
-  } catch (err) {
+  } catch  {
     return NextResponse.json({ error: "Failed to update customer" }, { status: 500 });
   }
 }
@@ -98,7 +98,7 @@ export async function DELETE(req: Request) {
     }
 
     return NextResponse.json({ success: true, id });
-  } catch (err) {
+  } catch  {
     return NextResponse.json({ error: "Failed to delete customer" }, { status: 500 });
   }
 }

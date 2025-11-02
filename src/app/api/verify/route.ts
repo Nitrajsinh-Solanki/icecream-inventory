@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     await user.save();
 
     return NextResponse.json({ message: "OTP verified successfully" });
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

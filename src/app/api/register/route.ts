@@ -95,7 +95,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ message: "OTP sent successfully" });
-  } catch (err) {
+  } catch  {
     return NextResponse.json(
       { error: "Something went wrong" },
       { status: 500 }

@@ -15,7 +15,7 @@ export async function PUT(req: Request) {
     ).select("-password -otp -otpExpires");
 
     return NextResponse.json(updated);
-  } catch (err) {
+  } catch  {
     return NextResponse.json({ error: "Update failed" }, { status: 500 });
   }
 }
